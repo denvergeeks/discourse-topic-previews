@@ -1,1 +1,14 @@
-
+// Theme's SCSS
+.topic-preview-tooltip {
+  position: fixed;
+  z-index: 5000;
+  background: #c00;
+  color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+  max-width: 400px;
+}
+.topic-preview-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
