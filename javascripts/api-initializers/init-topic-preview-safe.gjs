@@ -2,7 +2,7 @@ import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
 
 const cache = new Map();
-const activeTooltip = null;
+let activeTooltip = null;
 
 function getAllowedTopicIds(settings) {
   return (settings.enabled_topics || "")
@@ -81,8 +81,8 @@ function openModal(modal, model) {
 
 export default apiInitializer((api) => {
   api.decorateCookedElement((element, helper) => {
-    const post = helper.getPost();
-    if (!post) return;
+    // REMOVED: const post = helper.getPost();  <-- This was causing the error
+    // No post check needed for tooltip triggers
 
     const settings = api.container.lookup("service:theme-settings")?.themeSettings || {};
     const modal = api.container.lookup("service:modal");
