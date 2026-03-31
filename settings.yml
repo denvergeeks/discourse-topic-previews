@@ -1,2 +1,17 @@
-example_setting:
-  default: true
+enabled_topics:
+  default: ""
+  type: list
+  description: "Optional comma-separated list of topic IDs allowed for preview"
+
+hover_delay_ms:
+  default: 180
+  type: integer
+  description: "Delay before showing tooltip"
+
+preview_mode:
+  default: excerpt
+  type: enum
+  choices:
+    - excerpt
+    - cooked
+  description: "Use excerpt or first-post cooked HTML"
