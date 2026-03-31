@@ -4,6 +4,13 @@ import { ajax } from "discourse/lib/ajax";
 const cache = new Map();
 let activeTooltip = null;
 
+function extractTopicIdFromHref(href) {
+  if (!href) return null;
+  // Matches /t/slug/123 or /t/123
+  const m = href.match(/^\/t\/(?:[^/]+\/)?(\d+)(?:\/.*)?$/);
+  return m ? m[1] : null;
+}
+
 function fetchPreview(topicId) {
   if (cache.has(topicId)) {
     return cache.get(topicId);
@@ -41,7 +48,7 @@ function showTooltip(trigger, model) {
 
   const rect = trigger.getBoundingClientRect();
   tooltip.style.position = "fixed";
-  tooltip.style.left = `${rect.left}px`;
+  tooltip.style.left = `${Math.min(rect.left, window.innerWidth - 400)}px`;
   tooltip.style.top = `${rect.bottom + 8}px`;
 }
 
@@ -58,40 +65,41 @@ export default apiInitializer("topic-preview-safe", (api) => {
   api.decorateCookedElement((element /*, helper */) => {
     console.log("[topic-preview-safe] decorateCookedElement", element);
 
-    element.querySelectorAll(".topic-preview-trigger").forEach((trigger) => {
-      if (trigger.dataset.previewBound === "1") return;
-      trigger.dataset.previewBound = "1";
+    element
+      .querySelectorAll(".post__contents a, .cooked a")
+      .forEach((trigger) => {
+        if (trigger.dataset.previewBound === "1") return;
 
-      console.log("[topic-preview-safe] binding trigger", trigger);
+        const href = trigger.getAttribute("href") || "";
+        const topicId = extractTopicIdFromHref(href);
+        if (!topicId) return; // not a /t/... internal topic link
 
-      const topicId = trigger.dataset.topicId;
-      if (!topicId) {
-        console.warn("[topic-preview-safe] missing data-topic-id on trigger");
-        return;
-      }
+        trigger.dataset.previewBound = "1";
+        console.log("[topic-preview-safe] binding trigger", href, "->", topicId);
 
-      let hoverTimer;
+        let hoverTimer;
 
-      trigger.addEventListener("mouseenter", () => {
-        console.log("[topic-preview-safe] mouseenter", topicId);
-        hoverTimer = window.setTimeout(async () => {
+        trigger.addEventListener("mouseenter", () => {
+          console.log("[topic-preview-safe] mouseenter", topicId);
+          hoverTimer = window.setTimeout(async () => {
+            const model = await fetchPreview(topicId);
+            showTooltip(trigger, model);
+          }, 200);
+        });
+
+        trigger.addEventListener("mouseleave", () => {
+          console.log("[topic-preview-safe] mouseleave", topicId);
+          window.clearTimeout(hoverTimer);
+          hideTooltip();
+        });
+
+        trigger.addEventListener("click", async (e) => {
+          console.log("[topic-preview-safe] click", topicId);
+          e.preventDefault();
           const model = await fetchPreview(topicId);
-          showTooltip(trigger, model);
-        }, 200);
+          // For now, just navigate; later you can open DModal here.
+          window.location.href = model.url;
+        });
       });
-
-      trigger.addEventListener("mouseleave", () => {
-        console.log("[topic-preview-safe] mouseleave", topicId);
-        window.clearTimeout(hoverTimer);
-        hideTooltip();
-      });
-
-      trigger.addEventListener("click", async (e) => {
-        console.log("[topic-preview-safe] click", topicId);
-        e.preventDefault();
-        const model = await fetchPreview(topicId);
-        window.location.href = model.url;
-      });
-    });
   });
 });
