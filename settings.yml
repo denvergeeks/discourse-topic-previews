@@ -1,7 +1,7 @@
 enabled_topics:
   default: ""
   type: list
-  description: "Optional comma-separated list of topic IDs allowed for preview"
+  description: "Comma-separated topic IDs allowed for preview"
 
 hover_delay_ms:
   default: 180
