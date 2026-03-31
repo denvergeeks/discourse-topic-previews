@@ -4,38 +4,23 @@ import { ajax } from "discourse/lib/ajax";
 const cache = new Map();
 let activeTooltip = null;
 
-function getAllowedTopicIds(settings) {
-  return (settings.enabled_topics || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function isAllowed(topicId, settings) {
-  const allowed = getAllowedTopicIds(settings);
-  return allowed.length === 0 || allowed.includes(String(topicId));
-}
-
-function fetchPreview(topicId, settings) {
-  const key = `${topicId}:${settings.preview_mode}`;
-  if (cache.has(key)) {
-    return cache.get(key);
+function fetchPreview(topicId) {
+  if (cache.has(topicId)) {
+    return cache.get(topicId);
   }
 
   const promise = ajax(`/t/${topicId}.json`).then((data) => {
     const cooked = data.post_stream?.posts?.[0]?.cooked || "";
-    const excerpt = data.excerpt || "";
+    const excerpt = data.excerpt || cooked || "";
     return {
       id: data.id,
       title: data.title,
       url: data.slug ? `/t/${data.slug}/${data.id}` : `/t/${data.id}`,
-      excerpt,
-      cooked,
-      previewHtml: settings.preview_mode === "cooked" ? (cooked || excerpt) : (excerpt || cooked),
+      previewHtml: excerpt,
     };
   });
 
-  cache.set(key, promise);
+  cache.set(topicId, promise);
   return promise;
 }
 
@@ -49,23 +34,15 @@ function showTooltip(trigger, model) {
   tooltip.innerHTML = `
     <div class="topic-preview-title">${model.title}</div>
     <div class="topic-preview-excerpt">${model.previewHtml}</div>
-    <div class="topic-preview-actions">
-      <a href="${model.url}" class="btn btn-small btn-primary">Open</a>
-      <button type="button" class="btn btn-small btn-secondary close-tooltip">Close</button>
-    </div>
   `;
 
   document.body.appendChild(tooltip);
   activeTooltip = tooltip;
 
-  // Position tooltip
   const rect = trigger.getBoundingClientRect();
   tooltip.style.position = "fixed";
-  tooltip.style.left = `${Math.min(rect.left, window.innerWidth - 380)}px`;
+  tooltip.style.left = `${rect.left}px`;
   tooltip.style.top = `${rect.bottom + 8}px`;
-  tooltip.style.maxWidth = "380px";
-
-  tooltip.querySelector(".close-tooltip").onclick = () => hideTooltip();
 }
 
 function hideTooltip() {
@@ -75,43 +52,45 @@ function hideTooltip() {
   }
 }
 
-function openModal(modal, model) {
-  modal.show("topic-preview-modal", { model });
-}
+export default apiInitializer("topic-preview-safe", (api) => {
+  console.log("[topic-preview-safe] initializer running");
 
-export default apiInitializer((api) => {
-  api.decorateCookedElement((element, helper) => {
-    // REMOVED: const post = helper.getPost();  <-- This was causing the error
-    // No post check needed for tooltip triggers
-
-    const settings = api.container.lookup("service:theme-settings")?.themeSettings || {};
-    const modal = api.container.lookup("service:modal");
+  api.decorateCookedElement((element /*, helper */) => {
+    console.log("[topic-preview-safe] decorateCookedElement", element);
 
     element.querySelectorAll(".topic-preview-trigger").forEach((trigger) => {
       if (trigger.dataset.previewBound === "1") return;
       trigger.dataset.previewBound = "1";
 
+      console.log("[topic-preview-safe] binding trigger", trigger);
+
       const topicId = trigger.dataset.topicId;
-      if (!topicId || !isAllowed(topicId, settings)) return;
+      if (!topicId) {
+        console.warn("[topic-preview-safe] missing data-topic-id on trigger");
+        return;
+      }
 
       let hoverTimer;
 
       trigger.addEventListener("mouseenter", () => {
+        console.log("[topic-preview-safe] mouseenter", topicId);
         hoverTimer = window.setTimeout(async () => {
-          const model = await fetchPreview(topicId, settings);
+          const model = await fetchPreview(topicId);
           showTooltip(trigger, model);
-        }, Number(settings.hover_delay_ms || 180));
+        }, 200);
       });
 
       trigger.addEventListener("mouseleave", () => {
+        console.log("[topic-preview-safe] mouseleave", topicId);
         window.clearTimeout(hoverTimer);
         hideTooltip();
       });
 
       trigger.addEventListener("click", async (e) => {
+        console.log("[topic-preview-safe] click", topicId);
         e.preventDefault();
-        const model = await fetchPreview(topicId, settings);
-        openModal(modal, model);
+        const model = await fetchPreview(topicId);
+        window.location.href = model.url;
       });
     });
   });
